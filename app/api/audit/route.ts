@@ -4,7 +4,16 @@ import { db } from "@/lib/db";
 import { audits, auditCategories } from "@/lib/db/schema";
 import { SEO_AUDIT_SYSTEM_PROMPT, buildAuditUserPrompt } from "@/lib/audit-prompt";
 
-const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+let _client: Anthropic | null = null;
+function getClient() {
+  if (!_client) {
+    if (!process.env.ANTHROPIC_API_KEY) {
+      throw new Error("ANTHROPIC_API_KEY is not set. Add it to Vercel env vars.");
+    }
+    _client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+  }
+  return _client;
+}
 
 function normalizeUrl(input: string): string {
   let url = input.trim();
@@ -27,6 +36,18 @@ function extractJson(text: string): Record<string, unknown> | null {
 export const maxDuration = 60;
 
 export async function POST(req: NextRequest) {
+  try {
+    return await handleAudit(req);
+  } catch (e: any) {
+    console.error("Unhandled audit error:", e);
+    return NextResponse.json(
+      { error: e?.message || "An unexpected error occurred. Check your API key and try again." },
+      { status: 500 }
+    );
+  }
+}
+
+async function handleAudit(req: NextRequest) {
   const startTime = Date.now();
   try {
     const { url } = await req.json();
@@ -36,7 +57,7 @@ export async function POST(req: NextRequest) {
 
     const normalizedUrl = normalizeUrl(url);
 
-    const message = await client.messages.create({
+    const message = await getClient().messages.create({
       model: "claude-sonnet-4-20250514",
       max_tokens: 8000,
       system: SEO_AUDIT_SYSTEM_PROMPT,

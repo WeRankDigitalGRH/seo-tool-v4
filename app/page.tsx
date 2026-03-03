@@ -79,7 +79,15 @@ export default function Home() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ url: trimmed }),
       });
-      const data = await res.json();
+
+      let data;
+      const text = await res.text();
+      try {
+        data = JSON.parse(text);
+      } catch {
+        throw new Error(res.ok ? "Invalid response from server." : `Server error (${res.status}). Please try again.`);
+      }
+
       if (!res.ok) throw new Error(data.error || `Server error (${res.status})`);
       if (!data.categories || !data.overallScore) throw new Error("Incomplete audit data. Please try again.");
 
